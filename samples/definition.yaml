@@ -1,0 +1,13 @@
+kind: Definition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: definition-test
+  namespace: default
+spec:
+  deletionPolicy: Orphan 
+  swaggerPath: swagger.yaml
+  resourceGroup: test.group.com
+  resources: 
+    - kind: Pet
+      identifier: name
+  
