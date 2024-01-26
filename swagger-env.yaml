@@ -1,0 +1,442 @@
+openapi: 3.0.1
+info:
+  title: TaskAgent
+  description: ""
+  termsOfService: https://go.microsoft.com/fwlink/?LinkId=329770
+  contact:
+    name: nugetvss
+    email: nugetvss@microsoft.com
+  license:
+    name: MICROSOFT SOFTWARE LICENSE TERMS
+    url: https://go.microsoft.com/fwlink/?LinkId=329770
+  version: "7.0"
+externalDocs:
+  description: Azure DevOps REST APIs
+  url: https://aka.ms/azure-devops-rest-apis
+servers:
+- url: https://dev.azure.com
+security:
+- accessToken: []
+tags:
+- name: Agentclouds
+- name: Agentcloudtypes
+- name: Agents
+  description: Agents run jobs in pipelines.
+- name: Deploymentgroups
+- name: Environmentdeployment Records
+- name: Environments
+- name: Kubernetes
+- name: Pools
+  description: Agent pools offer up agents at the organization level.
+- name: Queues
+  description: Queues (called "pools" in the UI) connect projects to agent pools.
+- name: Requests
+- name: Targets
+- name: Taskgroups
+- name: Variablegroups
+- name: Yamlschema
+paths:
+  /{organization}/{project}/_apis/distributedtask/environments:
+    get:
+      tags:
+      - Environments
+      description: Get all environments.
+      operationId: Environments_List
+      parameters:
+      - name: organization
+        in: path
+        description: The name of the Azure DevOps organization.
+        required: true
+        schema:
+          type: string
+      - name: project
+        in: path
+        description: Project ID or project name
+        required: true
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: continuationToken
+        in: query
+        schema:
+          type: string
+      - name: $top
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: api-version
+        in: query
+        description: Version of the API to use.  This should be set to '7.0' to use
+          this version of the api.
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EnvironmentInstance'
+      security:
+      - oauth2:
+        - vso.environment_manage
+      x-ms-docs-override-version: "7.0"
+      x-ms-vss-resource: environments
+      x-ms-vss-method: GetEnvironments
+    post:
+      tags:
+      - Environments
+      description: Create an environment.
+      operationId: Environments_Add
+      parameters:
+      - name: organization
+        in: path
+        description: The name of the Azure DevOps organization.
+        required: true
+        schema:
+          type: string
+      - name: project
+        in: path
+        description: Project ID or project name
+        required: true
+        schema:
+          type: string
+      - name: api-version
+        in: query
+        description: Version of the API to use.  This should be set to '7.0' to use
+          this version of the api.
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: Environment to create.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvironmentCreateParameter'
+        required: true
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentInstance'
+      security:
+      - oauth2:
+        - vso.environment_manage
+      x-ms-docs-override-version: "7.0"
+      x-ms-vss-resource: environments
+      x-ms-vss-method: AddEnvironment
+      x-codegen-request-body-name: body
+  /{organization}/{project}/_apis/distributedtask/environments/{id}:
+    get:
+      tags:
+      - Environments
+      description: Get an environment by its ID.
+      operationId: Environments_Get
+      parameters:
+      - name: organization
+        in: path
+        description: The name of the Azure DevOps organization.
+        required: true
+        schema:
+          type: string
+      - name: project
+        in: path
+        description: Project ID or project name
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        description: ID of the environment.
+        required: true
+        schema:
+          type: integer
+          format: int32
+      - name: expands
+        in: query
+        description: Include these additional details in the returned objects.
+        schema:
+          type: string
+          enum:
+          - none
+          - resourceReferences
+          x-ms-enum:
+            name: EnvironmentExpands
+            values:
+            - value: none
+              description: No additional properties
+            - value: resourceReferences
+              description: Include resource references referring to the environment.
+        x-ms-enum:
+          name: EnvironmentExpands
+          values:
+          - value: none
+            description: No additional properties
+          - value: resourceReferences
+            description: Include resource references referring to the environment.
+      - name: api-version
+        in: query
+        description: Version of the API to use.  This should be set to '7.0' to use
+          this version of the api.
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentInstance'
+      security:
+      - oauth2:
+        - vso.environment_manage
+      x-ms-docs-override-version: "7.0"
+      x-ms-vss-resource: environments
+      x-ms-vss-method: GetEnvironmentById
+    delete:
+      tags:
+      - Environments
+      description: Delete the specified environment.
+      operationId: Environments_Delete
+      parameters:
+      - name: organization
+        in: path
+        description: The name of the Azure DevOps organization.
+        required: true
+        schema:
+          type: string
+      - name: project
+        in: path
+        description: Project ID or project name
+        required: true
+        schema:
+          type: string
+      - name: environmentId
+        in: path
+        description: ID of the environment.
+        required: true
+        schema:
+          type: integer
+          format: int32
+      - name: api-version
+        in: query
+        description: Version of the API to use.  This should be set to '7.0' to use
+          this version of the api.
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: successful operation
+          content: {}
+      security:
+      - oauth2:
+        - vso.environment_manage
+      x-ms-docs-override-version: "7.0"
+      x-ms-vss-resource: environments
+      x-ms-vss-method: DeleteEnvironment
+    patch:
+      tags:
+      - Environments
+      description: Update the specified environment.
+      operationId: Environments_Update
+      parameters:
+      - name: organization
+        in: path
+        description: The name of the Azure DevOps organization.
+        required: true
+        schema:
+          type: string
+      - name: project
+        in: path
+        description: Project ID or project name
+        required: true
+        schema:
+          type: string
+      - name: environmentId
+        in: path
+        description: ID of the environment.
+        required: true
+        schema:
+          type: integer
+          format: int32
+      - name: api-version
+        in: query
+        description: Version of the API to use.  This should be set to '7.0' to use
+          this version of the api.
+        required: true
+        schema:
+          type: string
+      requestBody:
+        description: Environment data to update.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvironmentUpdateParameter'
+        required: true
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentInstance'
+      security:
+      - oauth2:
+        - vso.environment_manage
+      x-ms-docs-override-version: "7.0"
+      x-ms-vss-resource: environments
+      x-ms-vss-method: UpdateEnvironment
+      x-codegen-request-body-name: body
+components:
+  schemas:
+    EnvironmentInstance:
+        type: object
+        properties:
+          createdBy:
+            $ref: '#/components/schemas/IdentityRef'
+          createdOn:
+            type: string
+            description: Creation time of the Environment
+            format: date-time
+          description:
+            type: string
+            description: Description of the Environment.
+          id:
+            type: integer
+            description: Id of the Environment
+            format: int32
+          lastModifiedBy:
+            $ref: '#/components/schemas/IdentityRef'
+          lastModifiedOn:
+            type: string
+            description: Last modified time of the Environment
+            format: date-time
+          name:
+            type: string
+            description: Name of the Environment.
+          project:
+            $ref: '#/components/schemas/ProjectReference'
+          resources:
+            type: array
+            items:
+              $ref: '#/components/schemas/EnvironmentResourceReference'
+        description: Environment.
+    IdentityRef:
+      properties:
+        directoryAlias:
+          type: string
+          description: Deprecated - Can be retrieved by querying the Graph user referenced
+            in the "self" entry of the IdentityRef "_links" dictionary
+        id:
+          type: string
+        imageUrl:
+          type: string
+          description: Deprecated - Available in the "avatar" entry of the IdentityRef
+            "_links" dictionary
+        inactive:
+          type: boolean
+          description: Deprecated - Can be retrieved by querying the Graph membership
+            state referenced in the "membershipState" entry of the GraphUser "_links"
+            dictionary
+        isAadIdentity:
+          type: boolean
+          description: Deprecated - Can be inferred from the subject type of the descriptor
+            (Descriptor.IsAadUserType/Descriptor.IsAadGroupType)
+        isContainer:
+          type: boolean
+          description: Deprecated - Can be inferred from the subject type of the descriptor
+            (Descriptor.IsGroupType)
+        isDeletedInOrigin:
+          type: boolean
+        profileUrl:
+          type: string
+          description: Deprecated - not in use in most preexisting implementations
+            of ToIdentityRef
+        uniqueName:
+          type: string
+          description: Deprecated - use Domain+PrincipalName instead
+      description: ""
+      # allOf:
+      # - $ref: '#/components/schemas/GraphSubjectBase'
+    ProjectReference:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      description: ""
+    EnvironmentResourceReference:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Id of the resource.
+          format: int32
+        name:
+          type: string
+          description: Name of the resource.
+        tags:
+          type: array
+          description: Tags of the Environment Resource Reference.
+          items:
+            type: string
+        type:
+          type: string
+          description: Type of the resource.
+          enum:
+          - undefined
+          - generic
+          - virtualMachine
+          - kubernetes
+          x-ms-enum:
+            name: EnvironmentResourceType
+            values:
+            - value: undefined
+              description: ""
+            - value: generic
+              description: Unknown resource type
+            - value: virtualMachine
+              description: Virtual machine resource type
+            - value: kubernetes
+              description: Kubernetes resource type
+      description: EnvironmentResourceReference.
+    EnvironmentCreateParameter:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of the environment.
+        name:
+          type: string
+          description: Name of the environment.
+      description: Properties to create Environment.
+    EnvironmentUpdateParameter:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of the environment.
+        name:
+          type: string
+          description: Name of the environment.
+      description: Properties to update Environment.
+  securitySchemes:
+    accessToken:
+      type: http
+      description: Personal access token. Use any value for the user name and the
+        token as the password.
+      scheme: basic

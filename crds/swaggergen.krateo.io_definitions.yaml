@@ -82,7 +82,13 @@ spec:
                         properties:
                           action:
                             description: Name of the action to perform when this api
-                              is called
+                              is called [create, update, list, get, delete]
+                            enum:
+                            - create
+                            - update
+                            - list
+                            - get
+                            - delete
                             type: string
                           method:
                             description: 'Method: the http method to use [GET, POST,
@@ -95,7 +101,8 @@ spec:
                             - PATCH
                             type: string
                           path:
-                            description: 'Path: the path to the api'
+                            description: 'Path: the path to the api - has to be the
+                              same path as the one in the swagger file you are referencing'
                             type: string
                         required:
                         - action

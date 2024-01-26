@@ -1,13 +1,23 @@
 kind: Definition
 apiVersion: swaggergen.krateo.io/v1alpha1
 metadata:
-  name: definition-test
+  name: definition-environments
   namespace: default
 spec:
   deletionPolicy: Orphan 
-  swaggerPath: swagger.yaml
-  resourceGroup: test.group.com
+  swaggerPath: swagger-env.yaml
+  resourceGroup: azure.devops.com
   resources: 
-    - kind: Pet
-      identifier: name
+    - kind: EnvironmentInstance
+      identifier: id
+      verbsDescription:
+        - action: get
+          method: GET
+          path: /{organization}/{project}/_apis/distributedtask/environments/{id}
+        - action: create
+          method: POST
+          path: /{organization}/{project}/_apis/distributedtask/environments
+
+
+
   

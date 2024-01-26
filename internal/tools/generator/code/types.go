@@ -47,7 +47,7 @@ func CreateTypesDotGo(workdir string, res *Resource) error {
 	g.Add(jen.Line())
 	// g.Add(createFailedObjectRef())
 	g.Add(jen.Line())
-	g.Add(createStatusStruct(res.Kind, info, text.CapitaliseFirstLetter(res.Identifier)))
+	g.Add(createStatusStruct(res.Kind, info, text.CapitaliseFirstLetter(res.Identifier), res.IsManaged))
 
 	g.Add(jen.Comment("+kubebuilder:object:root=true"))
 	g.Add(jen.Comment("+kubebuilder:subresource:status"))
@@ -102,6 +102,18 @@ func renderStruct(key string, el transpiler.Struct, res *Resource) jen.Code {
 				Tag(map[string]string{
 					"json": ",inline",
 				}).Line())
+		if res.AuthSchemas != nil {
+			for key, _ := range *res.AuthSchemas {
+				authRefField := transpiler.Field{
+					Name:        fmt.Sprintf("%sAuthRef", text.ToGolangName(key)),
+					JSONName:    fmt.Sprintf("%sAuthRef", strings.ToLower(key)),
+					Type:        "string",
+					Optional:    true,
+					Description: fmt.Sprintf("Reference to %sAuth", text.ToGolangName(key)),
+				}
+				fields = append(fields, renderField(authRefField))
+			}
+		}
 	}
 
 	for _, f := range el.Fields {
@@ -143,7 +155,7 @@ func renderField(el transpiler.Field) jen.Code {
 	return res
 }
 
-func createStatusStruct(kind string, info map[string]transpiler.Struct, identifier string) jen.Code {
+func createStatusStruct(kind string, info map[string]transpiler.Struct, identifier string, isManaged bool) jen.Code {
 	kind = text.ToGolangName(kind)
 	key := text.ToGolangName(fmt.Sprintf("%sStatus", kind))
 
@@ -156,15 +168,16 @@ func createStatusStruct(kind string, info map[string]transpiler.Struct, identifi
 		}
 	}
 
-	fields := []jen.Code{
-		jen.Qual(pkgCommon, "ManagedStatus").Tag(map[string]string{
-			"json": ",inline",
-		}),
-		// jen.Id("FailedObjectRef").Op("*").Id("FailedObjectRef").Tag(map[string]string{
-		// 	"json": "failedObjectRef,omitempty",
-		// }),
+	fields := []jen.Code{}
+
+	if isManaged {
+		fields = []jen.Code{
+			jen.Qual(pkgCommon, "ManagedStatus").Tag(map[string]string{
+				"json": ",inline",
+			}),
+		}
+		fields = append(fields, renderField(ideField))
 	}
-	fields = append(fields, renderField(ideField))
 
 	comment := fmt.Sprintf(pkgStatusCommentFmt, key, kind)
 	return jen.Comment(comment).Line().

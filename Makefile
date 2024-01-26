@@ -35,6 +35,7 @@ generate: tidy ## generate all CRDs
 
 .PHONY: tidy
 tidy: ## go mod tidy
+	kubectl delete -f tmp/gen-crds/crds/ -R || true
 	rm -rf ./tmp
 	go mod tidy
 

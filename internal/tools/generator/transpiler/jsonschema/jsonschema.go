@@ -176,6 +176,9 @@ func (schema *Schema) GetRoot() *Schema {
 func ParseReader(r io.Reader) (*Schema, error) {
 	s := &Schema{}
 	err := json.NewDecoder(r).Decode(s)
+	if err == io.EOF {
+		return nil, errors.New("empty schema")
+	}
 	if err == nil {
 		s.Init()
 	}

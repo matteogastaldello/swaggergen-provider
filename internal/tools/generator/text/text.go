@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 func CapitaliseFirstLetter(s string) string {
@@ -13,6 +14,18 @@ func CapitaliseFirstLetter(s string) string {
 	prefix := s[0:1]
 	suffix := s[1:]
 	return strings.ToUpper(prefix) + suffix
+}
+
+func FirstToLower(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError && size <= 1 {
+		return s
+	}
+	lc := unicode.ToLower(r)
+	if r == lc {
+		return s
+	}
+	return string(lc) + s[size:]
 }
 
 // ToGolangName strips invalid characters out of golang struct or field names.

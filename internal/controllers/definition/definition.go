@@ -4,6 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"k8s.io/client-go/tools/record"
@@ -22,6 +27,7 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
 	"github.com/krateoplatformops/provider-runtime/pkg/resource"
 
+	"github.com/matteogastaldello/swaggergen-provider/internal/tools/crds"
 	generation "github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/code"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
@@ -30,6 +36,9 @@ import (
 
 const (
 	errNotDefinition = "managed resource is not a Definition"
+	labelKeyGroup    = "krateo.io/crd-group"
+	labelKeyVersion  = "krateo.io/crd-version"
+	labelKeyResource = "krateo.io/crd-resource"
 )
 
 func Setup(mgr ctrl.Manager, o controller.Options) error {
@@ -114,29 +123,34 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotDefinition)
 	}
 
-	resources := cr.Spec.Resources
-	byteSchema, err := generation.GenerateJsonSchema(e.doc)
+	crdsByte, err := GenerateCRDS(cr, e.doc)
 	if err != nil {
 		return err
 	}
 
-	for _, resource := range resources {
-		fmt.Println(string(byteSchema[resource.Kind]))
-		err = code.Do(&code.Resource{
-			Group:      cr.Spec.ResourceGroup,
-			Version:    "v1alpha1",
-			Kind:       text.CapitaliseFirstLetter(resource.Kind),
-			Categories: []string{strings.ToLower(resource.Kind)},
-			Schema:     byteSchema[resource.Kind],
-			Identifier: resource.Identifier,
-		},
-			code.Options{
-				Module:  "github.com/matteogastaldello/swaggergen-provider",
-				Workdir: "./tmp/crd-gen",
-			},
-		)
+	for _, crdB := range crdsByte {
+		crd, err := crds.UnmarshalCRD(crdB)
 		if err != nil {
 			return err
+		}
+		if err := crds.InstallCRD(ctx, e.kube, crd); err != nil {
+			return err
+		}
+		if cr.Labels == nil {
+			cr.Labels = make(map[string]string)
+		}
+
+		dirty := false
+		if _, ok := cr.Labels[labelKeyGroup]; !ok {
+			dirty = true
+			cr.Labels[labelKeyGroup] = cr.Spec.ResourceGroup
+		}
+
+		if dirty {
+			err := e.kube.Update(ctx, cr, &client.UpdateOptions{})
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -155,4 +169,124 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) error {
 
 func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	return nil
+}
+
+func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[string][]byte, error) {
+	cfg := code.Options{
+		Module:  "github.com/matteogastaldello/swaggergen-provider",
+		Workdir: "./tmp/gen-crds/",
+	}
+	// clean := len(os.Getenv("GEN_CLEAN_WORKDIR")) == 0
+	// if clean {
+	// 	defer os.RemoveAll(cfg.Workdir)
+	// }
+	resources := cr.Spec.Resources
+	byteSchema, err := generation.GenerateJsonSchema(doc)
+	if err != nil {
+		return nil, err
+	}
+
+	authSchemas, err := generation.GenerateAuthSchema(doc)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range authSchemas {
+		err = code.Do(&code.Resource{
+			Group:      cr.Spec.ResourceGroup,
+			Version:    "v1alpha1",
+			Kind:       fmt.Sprintf("%sAuth", text.CapitaliseFirstLetter(key)),
+			Categories: []string{},
+			Schema:     value,
+			IsManaged:  false,
+		},
+			cfg,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for _, resource := range resources {
+		err = code.Do(&code.Resource{
+			Group:       cr.Spec.ResourceGroup,
+			Version:     "v1alpha1",
+			Kind:        text.CapitaliseFirstLetter(resource.Kind),
+			Categories:  []string{strings.ToLower(resource.Kind)},
+			Schema:      byteSchema[resource.Kind],
+			Identifier:  resource.Identifier,
+			AuthSchemas: &authSchemas,
+			IsManaged:   true,
+		},
+			cfg,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	cmd := exec.Command("go", "mod", "init", cfg.Module)
+	cmd.Dir = cfg.Workdir
+	if err := cmd.Run(); err != nil {
+		// return nil, fmt.Errorf("%s: performing 'go mod init' (workdir: %s, module: %s, gvk: %s/%s,%s)",
+		// 	err.Error(), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
+		return nil, err
+	}
+
+	cmd = exec.Command("go", "mod", "tidy")
+	cmd.Dir = cfg.Workdir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if len(out) > 0 {
+			// return nil, fmt.Errorf("%s: performing 'go mod tidy' (workdir: %s, module: %s, gvk: %s/%s,%s)",
+			// 	string(out), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
+			return nil, err
+		}
+		// return nil, fmt.Errorf("%s: performing 'go mod tidy' (workdir: %s, module: %s, gvk: %s/%s,%s)",
+		// 	err.Error(), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
+		return nil, err
+	}
+
+	cmd = exec.Command("go",
+		"run",
+		"--tags",
+		"generate",
+		"sigs.k8s.io/controller-tools/cmd/controller-gen",
+		"object:headerFile=./hack/boilerplate.go.txt",
+		"paths=./...", "crd:crdVersions=v1",
+		"output:artifacts:config=./crds",
+	)
+	cmd.Dir = cfg.Workdir
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		if len(out) > 0 {
+			// return nil, fmt.Errorf("%s: performing 'go run --tags generate...' (workdir: %s, module: %s, gvk: %s/%s,%s)",
+			// 	string(out), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
+			return nil, err
+		}
+		// return nil, fmt.Errorf("%s: performing 'go run --tags generate...' (workdir: %s, module: %s, gvk: %s/%s,%s)",
+		// 	err.Error(), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
+		return nil, err
+	}
+
+	fsys := os.DirFS(cfg.Workdir)
+	all, err := fs.ReadDir(fsys, "crds")
+	if err != nil {
+		return nil, err
+	}
+
+	crdsByte := make(map[string][]byte)
+	for _, file := range all {
+		fp, err := fsys.Open(filepath.Join("crds", file.Name()))
+		if err != nil {
+			return nil, err
+		}
+
+		crdsByte[file.Name()], err = io.ReadAll(fp)
+		if err != nil {
+			return nil, err
+		}
+		fp.Close()
+	}
+
+	return crdsByte, nil
 }

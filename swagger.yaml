@@ -792,6 +792,9 @@ components:
             items:
               $ref: '#/components/schemas/User'
   securitySchemes:
+    BasicAuth:
+      type: http
+      scheme: basic
     petstore_auth:
       type: oauth2
       flows:
