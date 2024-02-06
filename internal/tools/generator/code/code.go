@@ -63,6 +63,6 @@ func Do(res *Resource, cfg Options) error {
 	}
 	defer fp.Close()
 
-	_, err = fp.WriteString("// Copyright 2023 KrateoPlatformOps.")
+	_, err = fp.WriteString("// Copyright 2024 KrateoPlatformOps.")
 	return err
 }

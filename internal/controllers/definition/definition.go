@@ -181,15 +181,63 @@ func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[strin
 	// 	defer os.RemoveAll(cfg.Workdir)
 	// }
 	resources := cr.Spec.Resources
-	byteSchema, err := generation.GenerateJsonSchema(doc)
-	if err != nil {
-		return nil, err
+	byteSchema := make(map[string][]byte)
+	var err error
+
+	for _, resource := range resources {
+		for _, verb := range resource.VerbsDescription {
+			if strings.EqualFold(verb.Action, "create") && strings.EqualFold(verb.Method, "post") {
+				path := doc.Paths.Find(verb.Path)
+				if path == nil {
+					return nil, fmt.Errorf("path %s not found", verb.Path)
+				}
+				bodySchema := path.Post.RequestBody.Value.Content.Get("application/json").Schema
+				if bodySchema == nil {
+					return nil, fmt.Errorf("body schema not found for %s", verb.Path)
+				}
+				for _, param := range path.Post.Parameters {
+					if param.Ref != "" {
+						param.Ref = ""
+					}
+					pVal := param.Value
+					paramSchema := pVal.Schema.Value
+					bodySchema.Value.Properties[pVal.Name] = openapi3.NewSchemaRef("", paramSchema)
+				}
+
+				byteSchema[resource.Kind], err = generation.GenerateJsonSchemaFromSchema(bodySchema)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+		}
 	}
+
+	// byteSchema, err := generation.GenerateJsonSchema(doc)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	authSchemas, err := generation.GenerateAuthSchema(doc)
 	if err != nil {
 		return nil, err
 	}
+
+	// byteBody, err := generation.GenerateJsonSchemaFromSchema(doc.Paths.Find("/gists").Post.RequestBody.Value.Content.Get("application/json").Schema.Value)
+	// err = code.Do(&code.Resource{
+	// 	Group:      cr.Spec.ResourceGroup,
+	// 	Version:    "v1alpha1",
+	// 	Kind:       "GistBody",
+	// 	Categories: []string{},
+	// 	Schema:     byteBody,
+	// 	IsManaged:  false,
+	// },
+	// 	cfg,
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
+
 	for key, value := range authSchemas {
 		err = code.Do(&code.Resource{
 			Group:      cr.Spec.ResourceGroup,
@@ -245,7 +293,6 @@ func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[strin
 		// 	err.Error(), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
 		return nil, err
 	}
-
 	cmd = exec.Command("go",
 		"run",
 		"--tags",
@@ -258,6 +305,7 @@ func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[strin
 	cmd.Dir = cfg.Workdir
 	out, err = cmd.CombinedOutput()
 	if err != nil {
+		fmt.Println("Error: ", err)
 		if len(out) > 0 {
 			// return nil, fmt.Errorf("%s: performing 'go run --tags generate...' (workdir: %s, module: %s, gvk: %s/%s,%s)",
 			// 	string(out), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)

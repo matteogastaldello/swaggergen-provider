@@ -4,7 +4,40 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/invopop/jsonschema"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
+	"github.com/matteogastaldello/swaggergen-provider/internal/tools/swagger"
 )
+
+func ResolveRef(schema *openapi3.Schema) {
+
+}
+
+func GenerateJsonSchemaFromSchema(schema *openapi3.SchemaRef) ([]byte, error) {
+	byteMap := []byte{}
+	var err error
+
+	// for propName, property := range schema.Properties {
+	// 	if property.Ref != "" {
+	// 		schema.Properties[text.FirstToLower(propName)].Ref = ""
+	// 	}
+	// 	if property.Value.Type == "array" {
+	// 		if property.Value.Items.Ref != "" {
+	// 			schema.Properties[text.FirstToLower(propName)].Value.Items.Ref = ""
+	// 		}
+	// 	}
+	// }
+
+	derefer := swagger.NewDerefer()
+	derefer.DerefSchemaRef(schema)
+
+	byteMap, err = schema.MarshalJSON()
+	// fmt.Println(string(byteMap))
+	// fmt.Println("\n\n")
+	if err != nil {
+		return nil, err
+	}
+
+	return byteMap, nil
+}
 
 func GenerateJsonSchema(doc *openapi3.T) (map[string][]byte, error) {
 	components := doc.Components

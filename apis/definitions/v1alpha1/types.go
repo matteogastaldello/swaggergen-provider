@@ -9,14 +9,20 @@ type VerbsDescription struct {
 	// Name of the action to perform when this api is called [create, update, list, get, delete]
 	// +kubebuilder:validation:Enum=create;update;list;get;delete;
 	// +immutable
+	// +required
 	Action string `json:"action"`
 	// Method: the http method to use [GET, POST, PUT, DELETE, PATCH]
 	// +kubebuilder:validation:Enum=GET;POST;PUT;DELETE;PATCH
 	// +immutable
+	// +required
 	Method string `json:"method"`
 	// Path: the path to the api - has to be the same path as the one in the swagger file you are referencing
 	// +immutable
+	// +required
 	Path string `json:"path"`
+	// AltFieldMapping: the alternative mapping of the fields to use in the request
+	// +optional
+	AltFieldMapping map[string]string `json:"altFieldMapping,omitempty"`
 }
 
 type Resources struct {

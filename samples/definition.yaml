@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Orphan 
-  swaggerPath: swagger-env.yaml
+  swaggerPath: taskAgent.yaml
   resourceGroup: azure.devops.com
   resources: 
     - kind: EnvironmentInstance
@@ -17,6 +17,9 @@ spec:
         - action: create
           method: POST
           path: /{organization}/{project}/_apis/distributedtask/environments
+        - action: delete
+          method: DELETE
+          path: /{organization}/{project}/_apis/distributedtask/environments/{id}
 
 
 

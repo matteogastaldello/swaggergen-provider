@@ -90,6 +90,12 @@ spec:
                             - get
                             - delete
                             type: string
+                          altFieldMapping:
+                            additionalProperties:
+                              type: string
+                            description: 'AltFieldMapping: the alternative mapping
+                              of the fields to use in the request'
+                            type: object
                           method:
                             description: 'Method: the http method to use [GET, POST,
                               PUT, DELETE, PATCH]'

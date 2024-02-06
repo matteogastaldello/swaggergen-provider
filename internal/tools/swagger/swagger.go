@@ -7,7 +7,7 @@ import (
 )
 
 func LoadSchema(path string) (*openapi3.T, error) {
-	// Load the OpenAPI 3.0 spec file
+	// Load the OpenAPI 3.0 spec fileg
 	loader := openapi3.NewLoader()
 	doc, err := loader.LoadFromFile(path)
 	if err != nil {

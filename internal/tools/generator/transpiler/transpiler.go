@@ -48,6 +48,10 @@ func (g *transpiler) createStructs() (err error) {
 		if err != nil {
 			return err
 		}
+		// if rootType == "interface{}" || rootType == "[]interface{}" {
+		// 	fmt.Println("skipping interface{} type - creating strct")
+		// 	continue
+		// }
 		// ugh: if it was anything but a struct the type will not be the name...
 		if rootType != "*"+name {
 			a := Field{
@@ -67,7 +71,12 @@ func (g *transpiler) createStructs() (err error) {
 // process a block of definitions
 func (g *transpiler) processDefinitions(schema *jsonschema.Schema) error {
 	for key, subSchema := range schema.Definitions {
-		if _, err := g.processSchema(text.ToGolangName(key), subSchema); err != nil {
+		_, err := g.processSchema(text.ToGolangName(key), subSchema)
+		// if val == "interface{}" || val == "[]interface{}" {
+		// 	fmt.Println("skipping interface{} type")
+		// 	continue
+		// }
+		if err != nil {
 			return err
 		}
 	}
@@ -143,7 +152,7 @@ func (g *transpiler) processSchema(schemaName string, schema *jsonschema.Schema)
 			return g.processReference(schema)
 		}
 	}
-	return // return interface{}
+	return
 }
 
 // name: name of this array, usually the js key
@@ -157,9 +166,10 @@ func (g *transpiler) processArray(name string, schema *jsonschema.Schema) (typeS
 			return "", err
 		}
 		finalType, err := getPrimitiveTypeName("array", subTyp, true)
-		if err != nil {
-			return "", err
-		}
+		// if finalType == "[]interface{}" {
+		// 	fmt.Println("skipping interface{} type - processing array")
+		// 	return "", nil
+		// }
 		// only alias root arrays
 		if schema.Parent == nil {
 			array := Field{
@@ -268,7 +278,10 @@ func (g *transpiler) processObject(name string, schema *jsonschema.Schema) (typ 
 			strct.AdditionalType = "false"
 		}
 	}
-	g.Structs[strct.Name] = strct
+	if strct.AdditionalType != "interface{}" {
+		g.Structs[strct.Name] = strct
+	}
+
 	// objects are always a pointer
 	return getPrimitiveTypeName("object", name, true)
 }

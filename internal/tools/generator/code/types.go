@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/dave/jennifer/jen"
@@ -23,6 +24,18 @@ const (
 	pkgStatusCommentFmt = "%s defines the observed state of %s"
 )
 
+func isValidCRDDefinition(info map[string]transpiler.Struct) error {
+	invalidTypes := []string{"interface{}", "map[string]interface{}", "[]interface{}, map[interface{}]interface{}"}
+	for _, el := range info {
+		for _, f := range el.Fields {
+			if slices.Contains(invalidTypes, f.Type) {
+				return fmt.Errorf("invalid type %s for field %s", f.Type, f.Name)
+			}
+		}
+	}
+	return nil
+}
+
 func CreateTypesDotGo(workdir string, res *Resource) error {
 	srcdir, err := createSourceDir(workdir, res)
 	if err != nil {
@@ -33,7 +46,11 @@ func CreateTypesDotGo(workdir string, res *Resource) error {
 	if err != nil {
 		return err
 	}
+	if err := isValidCRDDefinition(info); err != nil {
+		return err
+	}
 
+	res.Identifier = text.CapitaliseFirstLetter(res.Identifier)
 	kind := text.ToGolangName(res.Kind)
 
 	g := jen.NewFile(normalizeVersion(res.Version))
@@ -47,7 +64,7 @@ func CreateTypesDotGo(workdir string, res *Resource) error {
 	g.Add(jen.Line())
 	// g.Add(createFailedObjectRef())
 	g.Add(jen.Line())
-	g.Add(createStatusStruct(res.Kind, info, text.CapitaliseFirstLetter(res.Identifier), res.IsManaged))
+	g.Add(createStatusStruct(res.Kind, info, res.Identifier, res.IsManaged))
 
 	g.Add(jen.Comment("+kubebuilder:object:root=true"))
 	g.Add(jen.Comment("+kubebuilder:subresource:status"))
@@ -103,7 +120,7 @@ func renderStruct(key string, el transpiler.Struct, res *Resource) jen.Code {
 					"json": ",inline",
 				}).Line())
 		if res.AuthSchemas != nil {
-			for key, _ := range *res.AuthSchemas {
+			for key := range *res.AuthSchemas {
 				authRefField := transpiler.Field{
 					Name:        fmt.Sprintf("%sAuthRef", text.ToGolangName(key)),
 					JSONName:    fmt.Sprintf("%sAuthRef", strings.ToLower(key)),
@@ -117,6 +134,9 @@ func renderStruct(key string, el transpiler.Struct, res *Resource) jen.Code {
 	}
 
 	for _, f := range el.Fields {
+		if f.Name == res.Identifier {
+			continue
+		}
 		fields = append(fields, renderField(f))
 	}
 
@@ -160,12 +180,18 @@ func createStatusStruct(kind string, info map[string]transpiler.Struct, identifi
 	key := text.ToGolangName(fmt.Sprintf("%sStatus", kind))
 
 	root := info["Root"]
-	var ideField transpiler.Field
+	var ideField *transpiler.Field
 	for _, f := range root.Fields {
 		if f.Name == identifier {
-			ideField = f
+			ideField = &f
 			break
 		}
+	}
+	if ideField == nil {
+		ideField = &transpiler.Field{}
+		ideField.Name = text.ToGolangName(identifier)
+		ideField.JSONName = text.FirstToLower(text.ToGolangName(identifier))
+		ideField.Type = "string" // assume type string
 	}
 
 	fields := []jen.Code{}
@@ -176,7 +202,7 @@ func createStatusStruct(kind string, info map[string]transpiler.Struct, identifi
 				"json": ",inline",
 			}),
 		}
-		fields = append(fields, renderField(ideField))
+		fields = append(fields, renderField(*ideField))
 	}
 
 	comment := fmt.Sprintf(pkgStatusCommentFmt, key, kind)
