@@ -1,71 +1,30 @@
 package generation
 
 import (
+	"fmt"
+
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/invopop/jsonschema"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/swagger"
+	"github.com/pb33f/libopenapi/datamodel/high/base"
+	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"sigs.k8s.io/yaml"
 )
 
-func ResolveRef(schema *openapi3.Schema) {
+const (
+	ErrInvalidSecuritySchema = "Invalid security schema type or scheme"
+)
 
-}
+func GenerateJsonSchemaFromSchemaProxy(schema *base.SchemaProxy) ([]byte, error) {
 
-func GenerateJsonSchemaFromSchema(schema *openapi3.SchemaRef) ([]byte, error) {
-	byteMap := []byte{}
-	var err error
-
-	// for propName, property := range schema.Properties {
-	// 	if property.Ref != "" {
-	// 		schema.Properties[text.FirstToLower(propName)].Ref = ""
-	// 	}
-	// 	if property.Value.Type == "array" {
-	// 		if property.Value.Items.Ref != "" {
-	// 			schema.Properties[text.FirstToLower(propName)].Value.Items.Ref = ""
-	// 		}
-	// 	}
-	// }
-
-	derefer := swagger.NewDerefer()
-	derefer.DerefSchemaRef(schema)
-
-	byteMap, err = schema.MarshalJSON()
-	// fmt.Println(string(byteMap))
-	// fmt.Println("\n\n")
+	bSchemaYAML, err := schema.Render()
 	if err != nil {
 		return nil, err
 	}
-
-	return byteMap, nil
-}
-
-func GenerateJsonSchema(doc *openapi3.T) (map[string][]byte, error) {
-	components := doc.Components
-	byteMap := make(map[string][]byte)
-	var err error
-	for key, schema := range components.Schemas {
-		for propName, property := range schema.Value.Properties {
-			if property.Ref != "" {
-				schema.Value.Properties[text.FirstToLower(propName)].Ref = ""
-			}
-			if property.Value.Type == "array" {
-				if property.Value.Items.Ref != "" {
-					schema.Value.Properties[text.FirstToLower(propName)].Value.Items.Ref = ""
-				}
-			}
-		}
-		byteMap[key], err = schema.Value.MarshalJSON()
-
-		// fmt.Println("\nKEY: ", key, "\n")
-		// fmt.Println(string(byteMap[key]))
-		// fmt.Println("\n\n")
-
-		if err != nil {
-			return nil, err
-		}
+	bSchemaJSON, err := yaml.YAMLToJSON(bSchemaYAML)
+	if err != nil {
+		return nil, err
 	}
-
-	return byteMap, nil
+	return bSchemaJSON, nil
 }
 
 type BasicAuth struct {
@@ -97,4 +56,18 @@ func GenerateAuthSchema(doc *openapi3.T) (map[string][]byte, error) {
 	}
 
 	return byteSchema, nil
+}
+
+func GenerateAuthSchemaFromSecuritySchema(doc *v3.SecurityScheme) (byteSchema []byte, err error) {
+	if doc.Type == "http" && doc.Scheme == "basic" {
+		authSchema := jsonschema.Reflect(&BasicAuth{})
+		byteSchema, err = authSchema.Definitions["BasicAuth"].MarshalJSON()
+		return byteSchema, err
+	} else if doc.Type == "http" && doc.Scheme == "bearer" {
+		authSchema := jsonschema.Reflect(&BearerAuth{})
+		byteSchema, err = authSchema.Definitions["BearerAuth"].MarshalJSON()
+		return byteSchema, err
+	}
+
+	return nil, fmt.Errorf(ErrInvalidSecuritySchema)
 }
