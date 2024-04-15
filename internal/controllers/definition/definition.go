@@ -8,10 +8,11 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
-	"k8s.io/client-go/tools/record"
+	fgetter "github.com/hashicorp/go-getter"
 
 	"github.com/krateoplatformops/provider-runtime/pkg/controller"
 	"github.com/krateoplatformops/provider-runtime/pkg/event"
@@ -21,7 +22,10 @@ import (
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/orderedmap"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -29,6 +33,7 @@ import (
 	"github.com/krateoplatformops/provider-runtime/pkg/resource"
 
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/crds"
+	"github.com/matteogastaldello/swaggergen-provider/internal/tools/deployment"
 	generation "github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/code"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
@@ -76,7 +81,29 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 	if !ok {
 		return nil, errors.New(errNotDefinition)
 	}
-	contents, _ := os.ReadFile(cr.Spec.SwaggerPath)
+	var err error
+	swaggerPath := cr.Spec.SwaggerPath
+
+	basePath := "/tmp/swaggergen-provider"
+	err = os.MkdirAll(basePath, os.ModePerm)
+	defer os.RemoveAll(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+	const errorLocalPath = "relative paths require a module with a pwd"
+	err = fgetter.GetFile(filepath.Join(basePath, filepath.Base(swaggerPath)), swaggerPath)
+	if err != nil && err.Error() == errorLocalPath {
+		swaggerPath, err = filepath.Abs(swaggerPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get absolute path: %w", err)
+		}
+		err = fgetter.GetFile(filepath.Join(basePath, filepath.Base(swaggerPath)), swaggerPath)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file: %w", err)
+	}
+
+	contents, _ := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
 	d, err := libopenapi.NewDocument(contents)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
@@ -159,11 +186,15 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			cr.Labels = make(map[string]string)
 		}
 
+		fmt.Println("Creating CRD", cr.Spec.ResourceGroup)
+
 		dirty := false
 		if _, ok := cr.Labels[labelKeyGroup]; !ok {
 			dirty = true
 			cr.Labels[labelKeyGroup] = cr.Spec.ResourceGroup
 		}
+
+		fmt.Println("Creating CRD label ", cr.Labels[labelKeyGroup])
 
 		if dirty {
 			err := e.kube.Update(ctx, cr, &client.UpdateOptions{})
@@ -173,13 +204,26 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 	}
 
+	err = deployment.Deploy(ctx, deployment.DeployOptions{
+		KubeClient: e.kube,
+		NamespacedName: types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Name,
+		},
+		Spec:            &cr.Spec,
+		ResourceVersion: "v1alpha1",
+	})
+	if err != nil {
+		return fmt.Errorf("deploying controller: %w", err)
+	}
+
 	cr.Status.Created = true
-	e.kube.Status().Update(ctx, cr)
+	err = e.kube.Status().Update(ctx, cr)
 
 	e.log.Debug("Creating Definition", "Path:", cr.Spec.SwaggerPath, "Group:", cr.Spec.ResourceGroup)
 	e.rec.Eventf(cr, corev1.EventTypeNormal, "DefinitionCreating",
 		"Definition '%s/%s' creating", cr.Spec.SwaggerPath, cr.Spec.ResourceGroup)
-	return nil
+	return err
 }
 
 func (e *external) Update(ctx context.Context, mg resource.Managed) error {
@@ -210,11 +254,17 @@ func (e *external) GenerateCRDS(cr *definitionv1alpha1.Definition) (map[string][
 				if path == nil {
 					return nil, fmt.Errorf("path %s not found", verb.Path)
 				}
-				bodySchema := path.Post.RequestBody.Content.Value("application/json").Schema //path.Post.RequestBody.Value.Content.Get("application/json").Schema
+				bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
+				if path.Post.RequestBody != nil {
+					bodySchema = path.Post.RequestBody.Content.Value("application/json").Schema //path.Post.RequestBody.Value.Content.Get("application/json").Schema
+				}
 				if bodySchema == nil {
 					return nil, fmt.Errorf("body schema not found for %s", verb.Path)
 				}
 				schema, err := bodySchema.BuildSchema()
+				if err != nil {
+					return nil, fmt.Errorf("building schema for %s: %w", verb.Path, err)
+				}
 
 				for _, param := range path.Post.Parameters {
 					schema.Properties.Set(param.Name, param.Schema)
@@ -239,9 +289,10 @@ func (e *external) GenerateCRDS(cr *definitionv1alpha1.Definition) (map[string][
 		if err != nil {
 			return nil, fmt.Errorf("generating bytes auth schema %s: %w", secSchema.Key(), err)
 		}
-		authSchemas[secSchema.Key()] = byteSchema
+		authSchemas[secSchema.Value().Scheme] = byteSchema
 	}
 	for _, resource := range resources {
+		fmt.Println("Generating resource schema", len(byteSchema), resource.Kind)
 		err = code.Do(&code.Resource{
 			Group:       cr.Spec.ResourceGroup,
 			Version:     "v1alpha1",

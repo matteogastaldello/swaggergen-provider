@@ -3,7 +3,6 @@ package generation
 import (
 	"fmt"
 
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/invopop/jsonschema"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -33,29 +32,6 @@ type BasicAuth struct {
 }
 type BearerAuth struct {
 	Token string `json:"token"`
-}
-
-func GenerateAuthSchema(doc *openapi3.T) (map[string][]byte, error) {
-	securitySchema := doc.Components.SecuritySchemes
-	var err error
-	byteSchema := make(map[string][]byte)
-	for _, schema := range securitySchema {
-		if schema.Value.Type == "http" && schema.Value.Scheme == "basic" {
-			authSchema := jsonschema.Reflect(&BasicAuth{})
-			byteSchema[schema.Value.Scheme], err = authSchema.Definitions["BasicAuth"].MarshalJSON()
-			if err != nil {
-				return nil, err
-			}
-		} else if schema.Value.Type == "http" && schema.Value.Scheme == "bearer" {
-			authSchema := jsonschema.Reflect(&BearerAuth{})
-			byteSchema[schema.Value.Scheme], err = authSchema.Definitions["BearerAuth"].MarshalJSON()
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return byteSchema, nil
 }
 
 func GenerateAuthSchemaFromSecuritySchema(doc *v3.SecurityScheme) (byteSchema []byte, err error) {

@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Orphan 
-  swaggerPath: github.yaml
+  swaggerPath: https://github.com/matteogastaldello/fromRepo/raw/main/github.yaml
   resourceGroup: github.com
   resources: 
     # - kind: Gists

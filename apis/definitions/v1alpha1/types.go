@@ -31,6 +31,7 @@ type Resources struct {
 	Kind string `json:"kind"`
 	// Identifier: the identifier of the resource to manage
 	// +immutable
+	// +optional
 	Identifier string `json:"identifier"`
 	// VerbsDescription: the list of verbs to use on this resource
 	// +optional
