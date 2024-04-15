@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   deletionPolicy: Orphan 
-  swaggerPath: taskAgent.yaml
+  swaggerPath: https://raw.githubusercontent.com/matteogastaldello/fromRepo/main/oas-def/taskAgent.yaml
   resourceGroup: azure.devops.com
   resources: 
     - kind: EnvironmentInstance
@@ -13,13 +13,17 @@ spec:
       verbsDescription:
         - action: get
           method: GET
-          path: /{organization}/{project}/_apis/distributedtask/environments/{id}
+          path: /{organization}/{project}/_apis/distributedtask/environments/{environmentId}
+          altFieldMapping:  # Optional: with the format <newField>: <oldField>
+            id: environmentId
         - action: create
           method: POST
           path: /{organization}/{project}/_apis/distributedtask/environments
         - action: delete
           method: DELETE
-          path: /{organization}/{project}/_apis/distributedtask/environments/{id}
+          path: /{organization}/{project}/_apis/distributedtask/environments/{environmentId}
+          altFieldMapping:  # Optional: with the format <newField>: <oldField>
+            id: environmentId
 
 
 

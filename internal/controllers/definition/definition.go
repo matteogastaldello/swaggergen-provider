@@ -8,30 +8,35 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
-	"k8s.io/client-go/tools/record"
+	fgetter "github.com/hashicorp/go-getter"
 
-	corev1 "k8s.io/api/core/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/krateoplatformops/provider-runtime/pkg/controller"
 	"github.com/krateoplatformops/provider-runtime/pkg/event"
 	"github.com/krateoplatformops/provider-runtime/pkg/logging"
 	"github.com/krateoplatformops/provider-runtime/pkg/ratelimiter"
 	definitionv1alpha1 "github.com/matteogastaldello/swaggergen-provider/apis/definitions/v1alpha1"
+	"github.com/pb33f/libopenapi"
+	"github.com/pb33f/libopenapi/datamodel/high/base"
+	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/orderedmap"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/krateoplatformops/provider-runtime/pkg/reconciler"
 	"github.com/krateoplatformops/provider-runtime/pkg/resource"
 
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/crds"
+	"github.com/matteogastaldello/swaggergen-provider/internal/tools/deployment"
 	generation "github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/code"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
-	swagger "github.com/matteogastaldello/swaggergen-provider/internal/tools/swagger"
 )
 
 const (
@@ -76,10 +81,51 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 	if !ok {
 		return nil, errors.New(errNotDefinition)
 	}
+	var err error
+	swaggerPath := cr.Spec.SwaggerPath
 
-	doc, err := swagger.LoadSchema(cr.Spec.SwaggerPath)
+	basePath := "/tmp/swaggergen-provider"
+	err = os.MkdirAll(basePath, os.ModePerm)
+	defer os.RemoveAll(basePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+	const errorLocalPath = "relative paths require a module with a pwd"
+	err = fgetter.GetFile(filepath.Join(basePath, filepath.Base(swaggerPath)), swaggerPath)
+	if err != nil && err.Error() == errorLocalPath {
+		swaggerPath, err = filepath.Abs(swaggerPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get absolute path: %w", err)
+		}
+		err = fgetter.GetFile(filepath.Join(basePath, filepath.Base(swaggerPath)), swaggerPath)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file: %w", err)
+	}
+
+	contents, _ := os.ReadFile(path.Join(basePath, path.Base(swaggerPath)))
+	d, err := libopenapi.NewDocument(contents)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	doc, modelErrors := d.BuildV3Model()
+	if len(modelErrors) > 0 {
+		return nil, fmt.Errorf("failed to build model: %w", errors.Join(modelErrors...))
+	}
+	if doc == nil {
+		return nil, fmt.Errorf("failed to build model")
+	}
+
+	// Resolve model references
+	resolvingErrors := doc.Index.GetResolver().Resolve()
+	errs := []error{}
+	for i := range resolvingErrors {
+		c.log.Debug("Resolving error", "error", resolvingErrors[i].Error())
+		errs = append(errs, resolvingErrors[i].ErrorRef)
+	}
+	if len(resolvingErrors) > 0 {
+		return nil, fmt.Errorf("failed to resolve model references: %w", errors.Join(errs...))
 	}
 
 	return &external{
@@ -95,7 +141,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (reconcile
 type external struct {
 	kube client.Client
 	log  logging.Logger
-	doc  *openapi3.T
+	doc  *libopenapi.DocumentModel[v3.Document]
 	rec  record.EventRecorder
 }
 
@@ -123,7 +169,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotDefinition)
 	}
 
-	crdsByte, err := GenerateCRDS(cr, e.doc)
+	crdsByte, err := e.GenerateCRDS(cr)
 	if err != nil {
 		return err
 	}
@@ -140,11 +186,15 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			cr.Labels = make(map[string]string)
 		}
 
+		fmt.Println("Creating CRD", cr.Spec.ResourceGroup)
+
 		dirty := false
 		if _, ok := cr.Labels[labelKeyGroup]; !ok {
 			dirty = true
 			cr.Labels[labelKeyGroup] = cr.Spec.ResourceGroup
 		}
+
+		fmt.Println("Creating CRD label ", cr.Labels[labelKeyGroup])
 
 		if dirty {
 			err := e.kube.Update(ctx, cr, &client.UpdateOptions{})
@@ -154,13 +204,26 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 	}
 
+	err = deployment.Deploy(ctx, deployment.DeployOptions{
+		KubeClient: e.kube,
+		NamespacedName: types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Name,
+		},
+		Spec:            &cr.Spec,
+		ResourceVersion: "v1alpha1",
+	})
+	if err != nil {
+		return fmt.Errorf("deploying controller: %w", err)
+	}
+
 	cr.Status.Created = true
-	e.kube.Status().Update(ctx, cr)
+	err = e.kube.Status().Update(ctx, cr)
 
 	e.log.Debug("Creating Definition", "Path:", cr.Spec.SwaggerPath, "Group:", cr.Spec.ResourceGroup)
 	e.rec.Eventf(cr, corev1.EventTypeNormal, "DefinitionCreating",
 		"Definition '%s/%s' creating", cr.Spec.SwaggerPath, cr.Spec.ResourceGroup)
-	return nil
+	return err
 }
 
 func (e *external) Update(ctx context.Context, mg resource.Managed) error {
@@ -171,7 +234,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	return nil
 }
 
-func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[string][]byte, error) {
+func (e *external) GenerateCRDS(cr *definitionv1alpha1.Definition) (map[string][]byte, error) {
 	cfg := code.Options{
 		Module:  "github.com/matteogastaldello/swaggergen-provider",
 		Workdir: "./tmp/gen-crds/",
@@ -187,24 +250,27 @@ func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[strin
 	for _, resource := range resources {
 		for _, verb := range resource.VerbsDescription {
 			if strings.EqualFold(verb.Action, "create") && strings.EqualFold(verb.Method, "post") {
-				path := doc.Paths.Find(verb.Path)
+				path := e.doc.Model.Paths.PathItems.Value(verb.Path)
 				if path == nil {
 					return nil, fmt.Errorf("path %s not found", verb.Path)
 				}
-				bodySchema := path.Post.RequestBody.Value.Content.Get("application/json").Schema
+				bodySchema := base.CreateSchemaProxy(&base.Schema{Properties: orderedmap.New[string, *base.SchemaProxy]()})
+				if path.Post.RequestBody != nil {
+					bodySchema = path.Post.RequestBody.Content.Value("application/json").Schema //path.Post.RequestBody.Value.Content.Get("application/json").Schema
+				}
 				if bodySchema == nil {
 					return nil, fmt.Errorf("body schema not found for %s", verb.Path)
 				}
-				for _, param := range path.Post.Parameters {
-					if param.Ref != "" {
-						param.Ref = ""
-					}
-					pVal := param.Value
-					paramSchema := pVal.Schema.Value
-					bodySchema.Value.Properties[pVal.Name] = openapi3.NewSchemaRef("", paramSchema)
+				schema, err := bodySchema.BuildSchema()
+				if err != nil {
+					return nil, fmt.Errorf("building schema for %s: %w", verb.Path, err)
 				}
 
-				byteSchema[resource.Kind], err = generation.GenerateJsonSchemaFromSchema(bodySchema)
+				for _, param := range path.Post.Parameters {
+					schema.Properties.Set(param.Name, param.Schema)
+				}
+
+				byteSchema[resource.Kind], err = generation.GenerateJsonSchemaFromSchemaProxy(base.CreateSchemaProxy(schema))
 				if err != nil {
 					return nil, err
 				}
@@ -213,48 +279,20 @@ func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[strin
 		}
 	}
 
-	// byteSchema, err := generation.GenerateJsonSchema(doc)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	authSchemas, err := generation.GenerateAuthSchema(doc)
-	if err != nil {
-		return nil, err
-	}
-
-	// byteBody, err := generation.GenerateJsonSchemaFromSchema(doc.Paths.Find("/gists").Post.RequestBody.Value.Content.Get("application/json").Schema.Value)
-	// err = code.Do(&code.Resource{
-	// 	Group:      cr.Spec.ResourceGroup,
-	// 	Version:    "v1alpha1",
-	// 	Kind:       "GistBody",
-	// 	Categories: []string{},
-	// 	Schema:     byteBody,
-	// 	IsManaged:  false,
-	// },
-	// 	cfg,
-	// )
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	for key, value := range authSchemas {
-		err = code.Do(&code.Resource{
-			Group:      cr.Spec.ResourceGroup,
-			Version:    "v1alpha1",
-			Kind:       fmt.Sprintf("%sAuth", text.CapitaliseFirstLetter(key)),
-			Categories: []string{},
-			Schema:     value,
-			IsManaged:  false,
-		},
-			cfg,
-		)
-		if err != nil {
-			return nil, err
+	authSchemas := make(map[string][]byte)
+	for secSchema := e.doc.Model.Components.SecuritySchemes.First(); secSchema != nil; secSchema = secSchema.Next() {
+		byteSchema, err := generation.GenerateAuthSchemaFromSecuritySchema(secSchema.Value())
+		if err != nil && err.Error() == generation.ErrInvalidSecuritySchema {
+			e.log.Debug("Skipping invalid security schema", "type", secSchema.Value().Type, "scheme", secSchema.Value().Scheme)
+			continue
 		}
+		if err != nil {
+			return nil, fmt.Errorf("generating bytes auth schema %s: %w", secSchema.Key(), err)
+		}
+		authSchemas[secSchema.Value().Scheme] = byteSchema
 	}
-
 	for _, resource := range resources {
+		fmt.Println("Generating resource schema", len(byteSchema), resource.Kind)
 		err = code.Do(&code.Resource{
 			Group:       cr.Spec.ResourceGroup,
 			Version:     "v1alpha1",
@@ -268,16 +306,30 @@ func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[strin
 			cfg,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("generating resource schema %s: %w", resource.Kind, err)
+		}
+	}
+
+	for key, value := range authSchemas {
+		err = code.Do(&code.Resource{
+			Group:      cr.Spec.ResourceGroup,
+			Version:    "v1alpha1",
+			Kind:       fmt.Sprintf("%sAuth", text.CapitaliseFirstLetter(key)),
+			Categories: []string{},
+			Schema:     value,
+			IsManaged:  false,
+		},
+			cfg,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("generating auth schema %s: %w", key, err)
 		}
 	}
 
 	cmd := exec.Command("go", "mod", "init", cfg.Module)
 	cmd.Dir = cfg.Workdir
 	if err := cmd.Run(); err != nil {
-		// return nil, fmt.Errorf("%s: performing 'go mod init' (workdir: %s, module: %s, gvk: %s/%s,%s)",
-		// 	err.Error(), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
-		return nil, err
+		return nil, fmt.Errorf("Performing 'go mod init' (workdir: %s, module: %s): %s", cfg.Workdir, cfg.Module, err)
 	}
 
 	cmd = exec.Command("go", "mod", "tidy")
@@ -285,13 +337,9 @@ func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[strin
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if len(out) > 0 {
-			// return nil, fmt.Errorf("%s: performing 'go mod tidy' (workdir: %s, module: %s, gvk: %s/%s,%s)",
-			// 	string(out), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
-			return nil, err
+			return nil, fmt.Errorf("Performing 'go mod tidy' (workdir: %s, module: %s): %s", cfg.Workdir, cfg.Module, err)
 		}
-		// return nil, fmt.Errorf("%s: performing 'go mod tidy' (workdir: %s, module: %s, gvk: %s/%s,%s)",
-		// 	err.Error(), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
-		return nil, err
+		return nil, fmt.Errorf("Performing 'go mod tidy' (workdir: %s, module: %s): %s", cfg.Workdir, cfg.Module, err)
 	}
 	cmd = exec.Command("go",
 		"run",
@@ -305,33 +353,28 @@ func GenerateCRDS(cr *definitionv1alpha1.Definition, doc *openapi3.T) (map[strin
 	cmd.Dir = cfg.Workdir
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		fmt.Println("Error: ", err)
 		if len(out) > 0 {
-			// return nil, fmt.Errorf("%s: performing 'go run --tags generate...' (workdir: %s, module: %s, gvk: %s/%s,%s)",
-			// 	string(out), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
-			return nil, err
+			return nil, fmt.Errorf("Performing 'go run --tags generate...' (workdir: %s, module: %s): %s", cfg.Workdir, cfg.Module, err)
 		}
-		// return nil, fmt.Errorf("%s: performing 'go run --tags generate...' (workdir: %s, module: %s, gvk: %s/%s,%s)",
-		// 	err.Error(), cfg.Workdir, cfg.Module, res.Group, res.Version, res.Kind)
-		return nil, err
+		return nil, fmt.Errorf("Performing 'go run --tags generate...' (workdir: %s, module: %s): %s", cfg.Workdir, cfg.Module, err)
 	}
 
 	fsys := os.DirFS(cfg.Workdir)
 	all, err := fs.ReadDir(fsys, "crds")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading dir %s: %w", "crds", err)
 	}
 
 	crdsByte := make(map[string][]byte)
 	for _, file := range all {
 		fp, err := fsys.Open(filepath.Join("crds", file.Name()))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("opening file %s: %w", file.Name(), err)
 		}
 
 		crdsByte[file.Name()], err = io.ReadAll(fp)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading file %s: %w", file.Name(), err)
 		}
 		fp.Close()
 	}
