@@ -167,7 +167,7 @@ type oasAuthJsonSchemaGetter struct {
 func (g *oasAuthJsonSchemaGetter) Get() ([]byte, error) {
 	byteSchema, err := generation.GenerateAuthSchemaFromSecuritySchema(g.secSchema)
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
 	return byteSchema, nil
 }

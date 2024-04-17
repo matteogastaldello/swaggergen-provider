@@ -34,6 +34,13 @@ type BearerAuth struct {
 	Token string `json:"token"`
 }
 
+func IsValidAuthSchema(doc *v3.SecurityScheme) bool {
+	if doc.Type == "http" && (doc.Scheme == "basic" || doc.Scheme == "bearer") {
+		return true
+	}
+	return false
+}
+
 func GenerateAuthSchemaFromSecuritySchema(doc *v3.SecurityScheme) (byteSchema []byte, err error) {
 	if doc.Type == "http" && doc.Scheme == "basic" {
 		authSchema := jsonschema.Reflect(&BasicAuth{})

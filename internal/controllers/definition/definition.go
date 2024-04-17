@@ -31,6 +31,7 @@ import (
 	"github.com/matteogastaldello/swaggergen-provider/internal/controllers/compositiondefinition/generator"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/crds"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/deployment"
+	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
 
 	"github.com/krateoplatformops/crdgen"
 	// "github.com/matteogastaldello/swaggergen-provider/internal/crdgen"
@@ -167,7 +168,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotDefinition)
 	}
 
-	resource := crdgen.Generate(context.TODO(), crdgen.Options{
+	resource := crdgen.Generate(ctx, crdgen.Options{
 		Managed: true,
 		WorkDir: "gen-crds",
 		GVK: schema.GroupVersionKind{
@@ -195,9 +196,12 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-		crdgen.Generate(context.TODO(), crdgen.Options{
-			Managed: true,
-			WorkDir: "gen-crds",
+		if !generation.IsValidAuthSchema(secSchemaPair.Value()) {
+			continue
+		}
+		resource = crdgen.Generate(ctx, crdgen.Options{
+			Managed: false,
+			WorkDir: "gen-crds-auth",
 			GVK: schema.GroupVersionKind{
 				Group:   cr.Spec.ResourceGroup,
 				Version: "v1alpha1",
@@ -207,6 +211,20 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			SpecJsonSchemaGetter:   generator.OASAuthJsonSchemaGetter(secSchemaPair.Value(), cr.Spec.Resource),
 			StatusJsonSchemaGetter: generator.OASStatusJsonSchemaGetter(e.doc, cr.Spec.Identifier),
 		})
+
+		if resource.Err != nil {
+			return fmt.Errorf("generating CRD: %w", resource.Err)
+		}
+
+		crd, err := crds.UnmarshalCRD(resource.Manifest)
+		if err != nil {
+			return fmt.Errorf("unmarshalling CRD: %w", err)
+		}
+
+		err = crds.InstallCRD(ctx, e.kube, crd)
+		if err != nil {
+			return fmt.Errorf("installing CRD: %w", err)
+		}
 	}
 
 	err = deployment.Deploy(ctx, deployment.DeployOptions{
