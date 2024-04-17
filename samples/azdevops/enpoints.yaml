@@ -1,0 +1,30 @@
+kind: Definition
+apiVersion: swaggergen.krateo.io/v1alpha1
+metadata:
+  name: def-endpoints
+  namespace: default
+spec:
+  deletionPolicy: Orphan 
+  swaggerPath: "https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/serviceEndpoint/endpoints.yaml"
+  resourceGroup: azure.devops.com
+  identifier: id
+  resource: 
+    kind: ServiceEndpoint
+    verbsDescription:
+      - action: create
+        method: POST
+        path: /{organization}/_apis/serviceendpoint/endpoints
+      - action: get
+        method: GET
+        path: /{organization}/{project}/_apis/serviceendpoint/endpoints/{endpointId}
+        altFieldMapping:  # Optional: with the format <newField>: <oldField>
+          id: endpointId
+      - action: delete
+        method: DELETE
+        path: /{organization}/_apis/serviceendpoint/endpoints/{endpointId}
+        altFieldMapping:  # Optional: with the format <newField>: <oldField>
+          id: endpointId
+
+
+
+  

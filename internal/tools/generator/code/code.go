@@ -7,14 +7,14 @@ import (
 )
 
 type Resource struct {
-	Group       string
-	Version     string
-	Kind        string
-	Categories  []string
-	Schema      []byte
-	Identifier  string
-	AuthSchemas *map[string][]byte
-	IsManaged   bool
+	Group        string
+	Version      string
+	Kind         string
+	Categories   []string
+	Schema       []byte
+	StatusSchema []byte
+	AuthSchemas  *map[string][]byte
+	IsManaged    bool
 }
 
 type Options struct {

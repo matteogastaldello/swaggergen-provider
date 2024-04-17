@@ -108,65 +108,63 @@ func Deploy(ctx context.Context, opts DeployOptions) error {
 			"name", sa.Name, "namespace", sa.Namespace)
 	}
 
-	for _, res := range opts.Spec.Resources {
-		gvr := ToGroupVersionResource(schema.GroupVersionKind{
-			Group:   opts.Spec.ResourceGroup,
-			Version: opts.ResourceVersion,
-			Kind:    res.Kind,
-		})
-		// role, err := CreateRole(pkg, gvr.Resource, opts.NamespacedName)
-		// if err != nil {
-		// 	return err
-		// }
-		// if err := InstallRole(ctx, opts.KubeClient, &role); err != nil {
-		// 	return err
-		// }
-		// if opts.Log != nil {
-		// 	opts.Log("Role successfully installed",
-		// 		"gvr", gvr.String(), "name", role.Name, "namespace", role.Namespace)
-		// }
+	gvr := ToGroupVersionResource(schema.GroupVersionKind{
+		Group:   opts.Spec.ResourceGroup,
+		Version: opts.ResourceVersion,
+		Kind:    opts.Spec.Resource.Kind,
+	})
+	// role, err := CreateRole(pkg, gvr.Resource, opts.NamespacedName)
+	// if err != nil {
+	// 	return err
+	// }
+	// if err := InstallRole(ctx, opts.KubeClient, &role); err != nil {
+	// 	return err
+	// }
+	// if opts.Log != nil {
+	// 	opts.Log("Role successfully installed",
+	// 		"gvr", gvr.String(), "name", role.Name, "namespace", role.Namespace)
+	// }
 
-		// rb := CreateRoleBinding(opts.NamespacedName)
-		// if err := InstallRoleBinding(ctx, opts.KubeClient, &rb); err != nil {
-		// 	return err
-		// }
-		// if opts.Log != nil {
-		// 	opts.Log("RoleBinding successfully installed",
-		// 		"gvr", gvr.String(), "name", rb.Name, "namespace", rb.Namespace)
-		// }
+	// rb := CreateRoleBinding(opts.NamespacedName)
+	// if err := InstallRoleBinding(ctx, opts.KubeClient, &rb); err != nil {
+	// 	return err
+	// }
+	// if opts.Log != nil {
+	// 	opts.Log("RoleBinding successfully installed",
+	// 		"gvr", gvr.String(), "name", rb.Name, "namespace", rb.Namespace)
+	// }
 
-		// cr := CreateClusterRole(opts.NamespacedName)
-		// if err := InstallClusterRole(ctx, opts.KubeClient, &cr); err != nil {
-		// 	return err
-		// }
-		// if opts.Log != nil {
-		// 	opts.Log("ClusterRole successfully installed",
-		// 		"gvr", gvr.String(), "name", cr.Name, "namespace", cr.Namespace)
-		// }
+	// cr := CreateClusterRole(opts.NamespacedName)
+	// if err := InstallClusterRole(ctx, opts.KubeClient, &cr); err != nil {
+	// 	return err
+	// }
+	// if opts.Log != nil {
+	// 	opts.Log("ClusterRole successfully installed",
+	// 		"gvr", gvr.String(), "name", cr.Name, "namespace", cr.Namespace)
+	// }
 
-		// crb := CreateClusterRoleBinding(opts.NamespacedName)
-		// if err := InstallClusterRoleBinding(ctx, opts.KubeClient, &crb); err != nil {
-		// 	return err
-		// }
-		// if opts.Log != nil {
-		// 	opts.Log("ClusterRoleBinding successfully installed",
-		// 		"gvr", gvr.String(), "name", crb.Name, "namespace", crb.Namespace)
-		// }
-		dep, err := CreateDeployment(gvr, opts.NamespacedName)
-		if err != nil {
-			return fmt.Errorf("failed to create deployment: %w", err)
-		}
-		b, _ := yaml.Marshal(dep)
-		fmt.Println(string(b))
+	// crb := CreateClusterRoleBinding(opts.NamespacedName)
+	// if err := InstallClusterRoleBinding(ctx, opts.KubeClient, &crb); err != nil {
+	// 	return err
+	// }
+	// if opts.Log != nil {
+	// 	opts.Log("ClusterRoleBinding successfully installed",
+	// 		"gvr", gvr.String(), "name", crb.Name, "namespace", crb.Namespace)
+	// }
+	dep, err := CreateDeployment(gvr, opts.NamespacedName)
+	if err != nil {
+		return fmt.Errorf("failed to create deployment: %w", err)
+	}
+	b, _ := yaml.Marshal(dep)
+	fmt.Println(string(b))
 
-		err = InstallDeployment(ctx, opts.KubeClient, &dep)
-		if err != nil {
-			return fmt.Errorf("failed to install deployment: %w", err)
-		}
-		if opts.Log != nil {
-			opts.Log("Deployment successfully installed",
-				"gvr", gvr.String(), "name", dep.Name, "namespace", dep.Namespace)
-		}
+	err = InstallDeployment(ctx, opts.KubeClient, &dep)
+	if err != nil {
+		return fmt.Errorf("failed to install deployment: %w", err)
+	}
+	if opts.Log != nil {
+		opts.Log("Deployment successfully installed",
+			"gvr", gvr.String(), "name", dep.Name, "namespace", dep.Namespace)
 	}
 
 	return nil

@@ -20,7 +20,7 @@ rules:
   resources: ["repoes/status"]
   verbs: ["*"]
 - apiGroups: ["azure.devops.com"]
-  resources: ["environmentinstances", "environmentinstances/status"]
+  resources: ["environmentinstances", "environmentinstances/status", "serviceendpoints", "serviceendpoints/status"]
   verbs: ["*"]
 - apiGroups: ["azure.devops.com"]
   resources: ["basicauths"]
