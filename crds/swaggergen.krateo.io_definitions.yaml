@@ -61,65 +61,62 @@ spec:
                 - Orphan
                 - Delete
                 type: string
+              identifier:
+                description: Identifier
+                type: string
+              resource:
+                description: The resource to manage
+                properties:
+                  kind:
+                    description: 'Name: the name of the resource to manage'
+                    type: string
+                  verbsDescription:
+                    description: 'VerbsDescription: the list of verbs to use on this
+                      resource'
+                    items:
+                      properties:
+                        action:
+                          description: Name of the action to perform when this api
+                            is called [create, update, list, get, delete]
+                          enum:
+                          - create
+                          - update
+                          - list
+                          - get
+                          - delete
+                          type: string
+                        altFieldMapping:
+                          additionalProperties:
+                            type: string
+                          description: 'AltFieldMapping: the alternative mapping of
+                            the fields to use in the request'
+                          type: object
+                        method:
+                          description: 'Method: the http method to use [GET, POST,
+                            PUT, DELETE, PATCH]'
+                          enum:
+                          - GET
+                          - POST
+                          - PUT
+                          - DELETE
+                          - PATCH
+                          type: string
+                        path:
+                          description: 'Path: the path to the api - has to be the
+                            same path as the one in the swagger file you are referencing'
+                          type: string
+                      required:
+                      - action
+                      - method
+                      - path
+                      type: object
+                    type: array
+                required:
+                - kind
+                type: object
               resourceGroup:
                 description: 'Group: the group of the resource to manage'
                 type: string
-              resources:
-                description: The list of the resources to Manage
-                items:
-                  properties:
-                    identifier:
-                      description: 'Identifier: the identifier of the resource to
-                        manage'
-                      type: string
-                    kind:
-                      description: 'Name: the name of the resource to manage'
-                      type: string
-                    verbsDescription:
-                      description: 'VerbsDescription: the list of verbs to use on
-                        this resource'
-                      items:
-                        properties:
-                          action:
-                            description: Name of the action to perform when this api
-                              is called [create, update, list, get, delete]
-                            enum:
-                            - create
-                            - update
-                            - list
-                            - get
-                            - delete
-                            type: string
-                          altFieldMapping:
-                            additionalProperties:
-                              type: string
-                            description: 'AltFieldMapping: the alternative mapping
-                              of the fields to use in the request'
-                            type: object
-                          method:
-                            description: 'Method: the http method to use [GET, POST,
-                              PUT, DELETE, PATCH]'
-                            enum:
-                            - GET
-                            - POST
-                            - PUT
-                            - DELETE
-                            - PATCH
-                            type: string
-                          path:
-                            description: 'Path: the path to the api - has to be the
-                              same path as the one in the swagger file you are referencing'
-                            type: string
-                        required:
-                        - action
-                        - method
-                        - path
-                        type: object
-                      type: array
-                  required:
-                  - kind
-                  type: object
-                type: array
               swaggerPath:
                 description: Represent the path to the swagger file
                 type: string

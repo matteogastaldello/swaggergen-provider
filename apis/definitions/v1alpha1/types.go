@@ -25,14 +25,10 @@ type VerbsDescription struct {
 	AltFieldMapping map[string]string `json:"altFieldMapping,omitempty"`
 }
 
-type Resources struct {
+type Resource struct {
 	// Name: the name of the resource to manage
 	// +immutable
 	Kind string `json:"kind"`
-	// Identifier: the identifier of the resource to manage
-	// +immutable
-	// +optional
-	Identifier string `json:"identifier"`
 	// VerbsDescription: the list of verbs to use on this resource
 	// +optional
 	VerbsDescription []VerbsDescription `json:"verbsDescription"`
@@ -46,9 +42,12 @@ type DefinitionSpec struct {
 	// Group: the group of the resource to manage
 	// +immutable
 	ResourceGroup string `json:"resourceGroup"`
-	// The list of the resources to Manage
+	// The resource to manage
 	// +optional
-	Resources []Resources `json:"resources"`
+	Resource Resource `json:"resource"`
+	// Identifier
+	// +optional
+	Identifier string `json:"identifier,omitempty"`
 }
 
 // DefinitionStatus is the status of a Definition.

@@ -50,7 +50,14 @@ func CreateTypesDotGo(workdir string, res *Resource) error {
 		return err
 	}
 
-	res.Identifier = text.CapitaliseFirstLetter(res.Identifier)
+	statusStruct, err := jsonschemaToStruct(bytes.NewReader(res.StatusSchema))
+	if err != nil {
+		return err
+	}
+	if err := isValidCRDDefinition(statusStruct); err != nil {
+		return err
+	}
+
 	kind := text.ToGolangName(res.Kind)
 
 	g := jen.NewFile(normalizeVersion(res.Version))
@@ -64,7 +71,8 @@ func CreateTypesDotGo(workdir string, res *Resource) error {
 	g.Add(jen.Line())
 	// g.Add(createFailedObjectRef())
 	g.Add(jen.Line())
-	g.Add(createStatusStruct(res.Kind, info, res.Identifier, res.IsManaged))
+	// g.Add(createStatusStruct(res.Kind, info, res.Identifier, res.IsManaged))
+	g.Add(renderStruct(text.ToGolangName(fmt.Sprintf("%sStatus", kind)), statusStruct["Root"], res))
 
 	g.Add(jen.Comment("+kubebuilder:object:root=true"))
 	g.Add(jen.Comment("+kubebuilder:subresource:status"))
@@ -134,9 +142,9 @@ func renderStruct(key string, el transpiler.Struct, res *Resource) jen.Code {
 	}
 
 	for _, f := range el.Fields {
-		if f.Name == res.Identifier {
-			continue
-		}
+		// if f.Name == res.Identifier {
+		// 	continue
+		// }
 		fields = append(fields, renderField(f))
 	}
 
@@ -175,24 +183,24 @@ func renderField(el transpiler.Field) jen.Code {
 	return res
 }
 
-func createStatusStruct(kind string, info map[string]transpiler.Struct, identifier string, isManaged bool) jen.Code {
+func createStatusStruct(kind string, info map[string]transpiler.Struct, isManaged bool) jen.Code {
 	kind = text.ToGolangName(kind)
 	key := text.ToGolangName(fmt.Sprintf("%sStatus", kind))
 
 	root := info["Root"]
-	var ideField *transpiler.Field
-	for _, f := range root.Fields {
-		if f.Name == identifier {
-			ideField = &f
-			break
-		}
-	}
-	if ideField == nil {
-		ideField = &transpiler.Field{}
-		ideField.Name = text.ToGolangName(identifier)
-		ideField.JSONName = text.FirstToLower(text.ToGolangName(identifier))
-		ideField.Type = "string" // assume type string
-	}
+	// var ideField *transpiler.Field
+	// for _, f := range root.Fields {
+	// 	if f.Name == identifier {
+	// 		ideField = &f
+	// 		break
+	// 	}
+	// }
+	// if ideField == nil {
+	// 	ideField = &transpiler.Field{}
+	// 	ideField.Name = text.ToGolangName(identifier)
+	// 	ideField.JSONName = text.FirstToLower(text.ToGolangName(identifier))
+	// 	ideField.Type = "string" // assume type string
+	// }
 
 	fields := []jen.Code{}
 
@@ -202,7 +210,7 @@ func createStatusStruct(kind string, info map[string]transpiler.Struct, identifi
 				"json": ",inline",
 			}),
 		}
-		fields = append(fields, renderField(*ideField))
+		// fields = append(fields, renderField(*ideField))
 	}
 
 	comment := fmt.Sprintf(pkgStatusCommentFmt, key, kind)
@@ -211,22 +219,20 @@ func createStatusStruct(kind string, info map[string]transpiler.Struct, identifi
 		Line()
 }
 
-/*
-func createStatusStruct(res *Resource) jen.Code {
-	kind := text.ToGolangName(res.Kind)
-	key := text.ToGolangName(fmt.Sprintf("%sStatus", kind))
+// func createStatusStruct(res *Resource) jen.Code {
+// 	kind := text.ToGolangName(res.Kind)
+// 	key := text.ToGolangName(fmt.Sprintf("%sStatus", kind))
 
-	field1 := jen.Qual(pkgCommon, "ManagedStatus").
-		Tag(map[string]string{
-			"json": ",inline",
-		}).Line()
+// 	field1 := jen.Qual(pkgCommon, "ManagedStatus").
+// 		Tag(map[string]string{
+// 			"json": ",inline",
+// 		}).Line()
 
-	comment := fmt.Sprintf(pkgStatusCommentFmt, key, kind)
-	return jen.Comment(comment).Line().
-		Type().Id(key).Struct(field1).
-		Line()
-}
-*/
+// 	comment := fmt.Sprintf(pkgStatusCommentFmt, key, kind)
+// 	return jen.Comment(comment).Line().
+// 		Type().Id(key).Struct(field1).
+// 		Line()
+// }
 
 func createFailedObjectRef() jen.Code {
 	meta := []transpiler.Field{
