@@ -168,9 +168,14 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotDefinition)
 	}
 
+	err := generator.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Identifier)
+	if err != nil {
+		return fmt.Errorf("generating byte schemas: %w", err)
+	}
+
 	resource := crdgen.Generate(ctx, crdgen.Options{
 		Managed: true,
-		WorkDir: "gen-crds",
+		WorkDir: fmt.Sprintf("gen-crds/%s", cr.Spec.Resource.Kind),
 		GVK: schema.GroupVersionKind{
 			Group:   cr.Spec.ResourceGroup,
 			Version: "v1alpha1",
@@ -201,7 +206,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 		resource = crdgen.Generate(ctx, crdgen.Options{
 			Managed: false,
-			WorkDir: "gen-crds-auth",
+			WorkDir: fmt.Sprintf("gen-crds/%s", secSchemaPair.Key()),
 			GVK: schema.GroupVersionKind{
 				Group:   cr.Spec.ResourceGroup,
 				Version: "v1alpha1",
