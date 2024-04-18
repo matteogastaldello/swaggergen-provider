@@ -53,7 +53,7 @@ func GenerateByteSchemas(doc *libopenapi.DocumentModel[v3.Document], resource de
 
 			// Add auth schema references to the spec schema
 			for key, _ := range secByteSchema {
-				bodySchema.Schema().Properties.Set(fmt.Sprintf("%sAuth", text.CapitaliseFirstLetter(key)),
+				bodySchema.Schema().Properties.Set(fmt.Sprintf("%sAuthRef", text.CapitaliseFirstLetter(key)),
 					base.CreateSchemaProxy(&base.Schema{Type: []string{"string"}}))
 			}
 
@@ -270,4 +270,17 @@ func (g *oasAuthJsonSchemaGetter) Get() ([]byte, error) {
 		return nil, nil
 	}
 	return byteSchema, nil
+}
+
+var _ crdgen.JsonSchemaGetter = (*staticJsonSchemaGetter)(nil)
+
+func StaticJsonSchemaGetter() crdgen.JsonSchemaGetter {
+	return &staticJsonSchemaGetter{}
+}
+
+type staticJsonSchemaGetter struct {
+}
+
+func (f *staticJsonSchemaGetter) Get() ([]byte, error) {
+	return nil, nil
 }

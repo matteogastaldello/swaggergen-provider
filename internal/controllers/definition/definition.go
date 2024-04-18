@@ -214,7 +214,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			},
 			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind)},
 			SpecJsonSchemaGetter:   generator.OASAuthJsonSchemaGetter(secSchemaPair.Value(), cr.Spec.Resource),
-			StatusJsonSchemaGetter: generator.OASStatusJsonSchemaGetter(e.doc, cr.Spec.Identifier),
+			StatusJsonSchemaGetter: generator.StaticJsonSchemaGetter(),
 		})
 
 		if resource.Err != nil {
