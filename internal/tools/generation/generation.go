@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ErrInvalidSecuritySchema = "Invalid security schema type or scheme"
+	ErrInvalidSecuritySchema = "invalid security schema type or scheme"
 )
 
 func GenerateJsonSchemaFromSchemaProxy(schema *base.SchemaProxy) ([]byte, error) {
@@ -39,6 +39,16 @@ func IsValidAuthSchema(doc *v3.SecurityScheme) bool {
 		return true
 	}
 	return false
+}
+
+func GenerateAuthSchemaName(doc *v3.SecurityScheme) (string, error) {
+	if doc.Type == "http" && doc.Scheme == "basic" {
+		return "BasicAuth", nil
+	} else if doc.Type == "http" && doc.Scheme == "bearer" {
+
+		return "BearerAuth", nil
+	}
+	return "", fmt.Errorf(ErrInvalidSecuritySchema)
 }
 
 func GenerateAuthSchemaFromSecuritySchema(doc *v3.SecurityScheme) (byteSchema []byte, err error) {

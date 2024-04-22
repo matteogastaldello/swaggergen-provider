@@ -20,7 +20,6 @@ import (
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,11 +29,10 @@ import (
 
 	"github.com/matteogastaldello/swaggergen-provider/internal/controllers/compositiondefinition/generator"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/crds"
-	"github.com/matteogastaldello/swaggergen-provider/internal/tools/deployment"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generation"
 
-	"github.com/krateoplatformops/crdgen"
-	// "github.com/matteogastaldello/swaggergen-provider/internal/crdgen"
+	//"github.com/krateoplatformops/crdgen"
+	"github.com/matteogastaldello/swaggergen-provider/internal/crdgen"
 	"github.com/matteogastaldello/swaggergen-provider/internal/tools/generator/text"
 )
 
@@ -168,9 +166,12 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotDefinition)
 	}
 
-	err := generator.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Identifier)
+	err, errors := generator.GenerateByteSchemas(e.doc, cr.Spec.Resource, cr.Spec.Resource.Identifier)
 	if err != nil {
 		return fmt.Errorf("generating byte schemas: %w", err)
+	}
+	for _, er := range errors {
+		e.log.Debug("Generating Byte Schemas", "Error:", er)
 	}
 
 	resource := crdgen.Generate(ctx, crdgen.Options{
@@ -182,8 +183,8 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 			Kind:    text.CapitaliseFirstLetter(cr.Spec.Resource.Kind),
 		},
 		Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind)},
-		SpecJsonSchemaGetter:   generator.OASSpecJsonSchemaGetter(e.doc, cr.Spec.Resource),
-		StatusJsonSchemaGetter: generator.OASStatusJsonSchemaGetter(e.doc, cr.Spec.Identifier),
+		SpecJsonSchemaGetter:   generator.OASSpecJsonSchemaGetter(),
+		StatusJsonSchemaGetter: generator.OASStatusJsonSchemaGetter(),
 	})
 
 	if resource.Err != nil {
@@ -201,19 +202,21 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 	}
 
 	for secSchemaPair := e.doc.Model.Components.SecuritySchemes.First(); secSchemaPair != nil; secSchemaPair = secSchemaPair.Next() {
-		if !generation.IsValidAuthSchema(secSchemaPair.Value()) {
+		authSchemaName, err := generation.GenerateAuthSchemaName(secSchemaPair.Value())
+		if err != nil {
+			e.log.Debug("Generating Auth Schema Name", "Error:", err)
 			continue
 		}
 		resource = crdgen.Generate(ctx, crdgen.Options{
 			Managed: false,
-			WorkDir: fmt.Sprintf("gen-crds/%s", secSchemaPair.Key()),
+			WorkDir: fmt.Sprintf("gen-crds/%s", authSchemaName),
 			GVK: schema.GroupVersionKind{
 				Group:   cr.Spec.ResourceGroup,
 				Version: "v1alpha1",
-				Kind:    fmt.Sprintf("%sAuth", text.CapitaliseFirstLetter(secSchemaPair.Key())),
+				Kind:    text.CapitaliseFirstLetter(authSchemaName),
 			},
 			Categories:             []string{strings.ToLower(cr.Spec.Resource.Kind)},
-			SpecJsonSchemaGetter:   generator.OASAuthJsonSchemaGetter(secSchemaPair.Value(), cr.Spec.Resource),
+			SpecJsonSchemaGetter:   generator.OASAuthJsonSchemaGetter(authSchemaName),
 			StatusJsonSchemaGetter: generator.StaticJsonSchemaGetter(),
 		})
 
@@ -232,18 +235,18 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) error {
 		}
 	}
 
-	err = deployment.Deploy(ctx, deployment.DeployOptions{
-		KubeClient: e.kube,
-		NamespacedName: types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      cr.Name,
-		},
-		Spec:            &cr.Spec,
-		ResourceVersion: "v1alpha1",
-	})
-	if err != nil {
-		return fmt.Errorf("deploying controller: %w", err)
-	}
+	// err = deployment.Deploy(ctx, deployment.DeployOptions{
+	// 	KubeClient: e.kube,
+	// 	NamespacedName: types.NamespacedName{
+	// 		Namespace: cr.Namespace,
+	// 		Name:      cr.Name,
+	// 	},
+	// 	Spec:            &cr.Spec,
+	// 	ResourceVersion: "v1alpha1",
+	// })
+	// if err != nil {
+	// 	return fmt.Errorf("deploying controller: %w", err)
+	// }
 
 	cr.Status.Created = true
 	err = e.kube.Status().Update(ctx, cr)

@@ -3,13 +3,15 @@ apiVersion: swaggergen.krateo.io/v1alpha1
 metadata:
   name: def-endpoints
   namespace: default
+  labels:
+    krateo.io/crd-group: azure.devops.com
 spec:
   deletionPolicy: Orphan 
   swaggerPath: "https://raw.githubusercontent.com/matteogastaldello/azuredevops-oas3/main/serviceEndpoint/endpoints.yaml"
   resourceGroup: azure.devops.com
-  identifier: id
   resource: 
     kind: ServiceEndpoint
+    identifier: id
     verbsDescription:
       - action: create
         method: POST

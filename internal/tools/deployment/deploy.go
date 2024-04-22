@@ -8,7 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 )
 
 type UndeployOptions struct {
@@ -155,8 +154,8 @@ func Deploy(ctx context.Context, opts DeployOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to create deployment: %w", err)
 	}
-	b, _ := yaml.Marshal(dep)
-	fmt.Println(string(b))
+	// b, _ := yaml.Marshal(dep)
+	// fmt.Println(string(b))
 
 	err = InstallDeployment(ctx, opts.KubeClient, &dep)
 	if err != nil {

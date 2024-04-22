@@ -61,12 +61,12 @@ spec:
                 - Orphan
                 - Delete
                 type: string
-              identifier:
-                description: Identifier
-                type: string
               resource:
                 description: The resource to manage
                 properties:
+                  identifier:
+                    description: Identifier
+                    type: string
                   kind:
                     description: 'Name: the name of the resource to manage'
                     type: string

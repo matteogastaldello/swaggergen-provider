@@ -32,6 +32,9 @@ type Resource struct {
 	// VerbsDescription: the list of verbs to use on this resource
 	// +optional
 	VerbsDescription []VerbsDescription `json:"verbsDescription"`
+	// Identifier
+	// +optional
+	Identifier string `json:"identifier,omitempty"`
 }
 
 // DefinitionSpec is the specification of a Definition.
@@ -45,9 +48,6 @@ type DefinitionSpec struct {
 	// The resource to manage
 	// +optional
 	Resource Resource `json:"resource"`
-	// Identifier
-	// +optional
-	Identifier string `json:"identifier,omitempty"`
 }
 
 // DefinitionStatus is the status of a Definition.
